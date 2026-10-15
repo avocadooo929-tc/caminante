@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-const PROTECTED_PREFIXES = ['/palabras', '/vocabulario', '/practica', '/gramatica', '/perfil']
+const PROTECTED_PREFIXES = ['/palabras', '/vocabulario', '/gramatica', '/perfil']
 
 export async function updateSession(request: NextRequest) {
   // Supabase 尚未配置时直接放行，避免每个页面都 500

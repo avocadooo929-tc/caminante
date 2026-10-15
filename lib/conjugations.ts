@@ -98,6 +98,49 @@ const IRREGULAR_PRESENT: Record<string, string[]> = {
   construir: ['construyo', 'construyes', 'construye', 'construimos', 'construís', 'construyen'],
 }
 
+// 代词式动词（-se 结尾，如 levantarse/llamarse）：变位时去掉 -se 再变位词干
+export function isPronominalVerb(verb: string): boolean {
+  return verb.endsWith('se') && verb.length > 2
+}
+
+function baseVerb(verb: string): string {
+  return isPronominalVerb(verb) ? verb.slice(0, -2) : verb
+}
+
+// 常见「前缀 + 完全不规则动词」的复合词：mantener/tener、convenir/venir、componer/poner 等。
+// 只列「变位可直接加前缀」的安全词干（按长度从长到短匹配，避免误匹配短词干）。
+const PREFIXABLE_BASES = [
+  'agradecer',
+  'conocer',
+  'parecer',
+  'ofrecer',
+  'traducir',
+  'producir',
+  'conducir',
+  'crecer',
+  'nacer',
+  'tener',
+  'venir',
+  'poner',
+  'hacer',
+  'decir',
+  'traer',
+  'caer',
+  'valer',
+  'salir',
+].sort((a, b) => b.length - a.length)
+
+/** 复合不规则动词：若以某个不规则词干结尾，则前缀 + 该词干的不规则变位 */
+function resolvePrefixedIrregular(verb: string): string[] | null {
+  for (const base of PREFIXABLE_BASES) {
+    if (verb.length > base.length && verb.endsWith(base)) {
+      const prefix = verb.slice(0, verb.length - base.length)
+      return IRREGULAR_PRESENT[base].map((form) => prefix + form)
+    }
+  }
+  return null
+}
+
 export const PRONOUNS = ['yo', 'tú', 'él/ella', 'nosotros', 'vosotros', 'ellos']
 
 function regularConjugation(verb: string): string[] | null {
@@ -118,19 +161,24 @@ function regularConjugation(verb: string): string[] | null {
 
 /** 返回陈述式一般现在时的六个人称形式，无法变位时返回 null */
 export function getPresentConjugation(verb: string): string[] | null {
-  if (IRREGULAR_PRESENT[verb]) return IRREGULAR_PRESENT[verb]
-  return regularConjugation(verb)
+  const base = baseVerb(verb)
+  if (IRREGULAR_PRESENT[base]) return IRREGULAR_PRESENT[base]
+  const prefixed = resolvePrefixedIrregular(base)
+  if (prefixed) return prefixed
+  return regularConjugation(base)
 }
 
-/** 判断某动词是否属于不规则动词表 */
+/** 判断某动词是否属于不规则动词表（含复合词、代词式动词） */
 export function isIrregularVerb(verb: string): boolean {
-  return verb in IRREGULAR_PRESENT
+  const base = baseVerb(verb)
+  return base in IRREGULAR_PRESENT || resolvePrefixedIrregular(base) !== null
 }
 
 /** 逐个人称判断是否不规则（与规则变位对比），返回六个布尔值 */
 export function getIrregularMask(verb: string): boolean[] | null {
+  const base = baseVerb(verb)
   const forms = getPresentConjugation(verb)
-  const regular = regularConjugation(verb)
+  const regular = regularConjugation(base)
   if (!forms || !regular) return null
   return forms.map((f, i) => f !== regular[i])
 }

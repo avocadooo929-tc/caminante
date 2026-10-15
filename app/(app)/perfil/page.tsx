@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import type { Level } from '@/lib/types'
+import type { ExerciseType, Level } from '@/lib/types'
 import { levelFromValue } from '@/lib/levels'
 import { LevelPicker } from '@/components/level-picker'
 import { LearningProgress } from '@/components/learning-progress'
@@ -15,6 +15,7 @@ export default function PerfilPage() {
   const [email, setEmail] = useState('')
   const [level, setLevel] = useState<Level>('A1')
   const [dailyGoal, setDailyGoal] = useState(20)
+  const [exerciseType, setExerciseType] = useState<ExerciseType>('translate_zh_es')
   const [saved, setSaved] = useState(false)
   const router = useRouter()
 
@@ -28,11 +29,12 @@ export default function PerfilPage() {
       setEmail(user.email ?? '')
       const { data } = await supabase
         .from('profiles')
-        .select('target_level, daily_goal')
+        .select('target_level, daily_goal, exercise_type')
         .eq('id', user.id)
         .single()
       if (data?.target_level) setLevel(levelFromValue(data.target_level))
       if (data?.daily_goal != null) setDailyGoal(data.daily_goal)
+      if (data?.exercise_type) setExerciseType(data.exercise_type as ExerciseType)
     }
     load()
   }, [])
@@ -57,6 +59,16 @@ export default function PerfilPage() {
     } = await supabase.auth.getUser()
     if (!user) return
     await supabase.from('profiles').update({ daily_goal: g }).eq('id', user.id)
+  }
+
+  async function onExerciseTypeChange(t: ExerciseType) {
+    setExerciseType(t)
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('profiles').update({ exercise_type: t }).eq('id', user.id)
   }
 
   async function logout() {
@@ -106,6 +118,34 @@ export default function PerfilPage() {
         {saved && (
           <p className="mt-2 text-sm font-bold text-bauhaus-blue">已保存 ✓</p>
         )}
+      </Card>
+
+      <Card className="p-6">
+        <h2 className="mb-1 font-black">练习模式</h2>
+        <p className="mb-3 text-sm text-bauhaus-muted">
+          在「单词」里用练习方式复习时，出哪种题
+        </p>
+        <div className="flex gap-2">
+          {(
+            [
+              { value: 'translate_zh_es', label: '中译西' },
+              { value: 'translate_es_zh', label: '西译中' },
+            ] as { value: ExerciseType; label: string }[]
+          ).map((t) => (
+            <button
+              key={t.value}
+              type="button"
+              onClick={() => onExerciseTypeChange(t.value)}
+              className={`flex-1 rounded-sm border-2 px-2 py-2 text-sm font-black ${
+                exerciseType === t.value
+                  ? 'border-bauhaus-black bg-bauhaus-black text-white'
+                  : 'border-bauhaus-line bg-white text-bauhaus-muted'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </Card>
 
       <Card className="p-6">

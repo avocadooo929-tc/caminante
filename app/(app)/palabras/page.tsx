@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
-import type { ExampleSentence, Level, Word } from '@/lib/types'
+import type { ExampleSentence, ExerciseType, Level, Word } from '@/lib/types'
 import { levelFromValue } from '@/lib/levels'
 import { nextDueAt, review } from '@/lib/srs'
 import { loadWordMap } from '@/lib/manual-words'
@@ -24,6 +24,14 @@ interface DueItem {
   word: Word
 }
 
+interface GradeResult {
+  correct: boolean
+  feedback: string
+  model_answer: string
+}
+
+type StudyMode = 'flash' | 'exercise'
+
 export default function PalabrasPage() {
   const [loading, setLoading] = useState(true)
   const [due, setDue] = useState<DueItem[]>([])
@@ -32,8 +40,20 @@ export default function PalabrasPage() {
   const [stats, setStats] = useState({ due: 0, learning: 0, known: 0 })
   const [progressKey, setProgressKey] = useState(0)
   const [userLevel, setUserLevel] = useState<Level>('A1')
+  const [exerciseType, setExerciseType] = useState<ExerciseType>('translate_zh_es')
   const [sentences, setSentences] = useState<ExampleSentence[]>([])
   const [sentencesLoading, setSentencesLoading] = useState(false)
+
+  // 学习方式：方式一=闪卡（认识/不认识），方式二=练习（正误决定认识/不认识）
+  const [mode, setMode] = useState<StudyMode>('flash')
+
+  // 练习模式状态
+  const [prompt, setPrompt] = useState<string | null>(null)
+  const [answer, setAnswer] = useState('')
+  const [genLoading, setGenLoading] = useState(false)
+  const [grading, setGrading] = useState(false)
+  const [gradeResult, setGradeResult] = useState<GradeResult | null>(null)
+  const [exerciseError, setExerciseError] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -44,10 +64,11 @@ export default function PalabrasPage() {
 
     const { data: prof } = await supabase
       .from('profiles')
-      .select('target_level')
+      .select('target_level, exercise_type')
       .eq('id', user.id)
       .single()
     if (prof?.target_level) setUserLevel(levelFromValue(prof.target_level))
+    if (prof?.exercise_type) setExerciseType(prof.exercise_type as ExerciseType)
 
     const now = new Date().toISOString()
     const [dueRes, dueCountRes, learningRes, knownRes, wordMap] = await Promise.all([
@@ -113,6 +134,61 @@ export default function PalabrasPage() {
 
   const current = due[idx]
 
+  // 方式二：当前词变化时自动出题
+  useEffect(() => {
+    if (mode === 'exercise' && current) {
+      generateExerciseFor(current.word)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, current?.id])
+
+  async function generateExerciseFor(w: Word) {
+    setGenLoading(true)
+    setPrompt(null)
+    setAnswer('')
+    setGradeResult(null)
+    setExerciseError(null)
+    try {
+      const res = await fetch('/api/ai/exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          word: w.spanish,
+          definitionCn: w.definition_cn,
+          level: userLevel,
+          exerciseType,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '出题失败')
+      setPrompt(data.prompt)
+    } catch (e) {
+      setExerciseError(e instanceof Error ? e.message : '出题失败')
+    } finally {
+      setGenLoading(false)
+    }
+  }
+
+  async function submitExercise() {
+    if (!prompt || answer.trim() === '') return
+    setGrading(true)
+    setExerciseError(null)
+    try {
+      const res = await fetch('/api/ai/grade', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, userAnswer: answer }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '批改失败')
+      setGradeResult(data as GradeResult)
+    } catch (e) {
+      setExerciseError(e instanceof Error ? e.message : '批改失败')
+    } finally {
+      setGrading(false)
+    }
+  }
+
   async function loadSentencesFor(item: DueItem) {
     const supabase = createClient()
     setSentencesLoading(true)
@@ -148,7 +224,7 @@ export default function PalabrasPage() {
   }
 
   useEffect(() => {
-    if (flipped && current) {
+    if (mode === 'flash' && flipped && current) {
       loadSentencesFor(current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -216,6 +292,9 @@ export default function PalabrasPage() {
     await logStudy({ reviewed: 1 })
     setProgressKey((k) => k + 1)
     setFlipped(false)
+    setPrompt(null)
+    setAnswer('')
+    setGradeResult(null)
     if (idx + 1 < due.length) {
       setIdx(idx + 1)
     } else {
@@ -229,12 +308,34 @@ export default function PalabrasPage() {
     <div className="flex flex-col gap-6">
       <DailyProgress refreshKey={progressKey} />
 
+      {/* 学习方式切换 */}
+      <div className="grid grid-cols-2 gap-2">
+        {(
+          [
+            { value: 'flash', label: '方式一 · 闪卡' },
+            { value: 'exercise', label: '方式二 · 练习' },
+          ] as { value: StudyMode; label: string }[]
+        ).map((m) => (
+          <button
+            key={m.value}
+            type="button"
+            onClick={() => setMode(m.value)}
+            className={`rounded-sm border-2 px-2 py-2 text-sm font-black ${
+              mode === m.value
+                ? 'border-bauhaus-black bg-bauhaus-black text-white'
+                : 'border-bauhaus-line bg-white text-bauhaus-muted hover:border-bauhaus-black'
+            }`}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
+
       {/* 统计 */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {[
           { label: '待复习', value: stats.due, color: 'text-bauhaus-red' },
           { label: '学习中', value: stats.learning, color: 'text-bauhaus-yellow' },
-          { label: '已掌握', value: stats.known, color: 'text-bauhaus-blue' },
         ].map((s) => (
           <Card key={s.label} className="p-3 text-center shadow-none">
             <div className={`text-3xl font-black ${s.color}`}>{s.value}</div>
@@ -245,87 +346,173 @@ export default function PalabrasPage() {
         ))}
       </div>
 
-      {/* 复习卡片 */}
+      {/* 复习卡片（方式一） / 练习（方式二） */}
       {current ? (
-        <div className="flex flex-col gap-4">
-          <div
-            role="button"
-            tabIndex={0}
-            onClick={() => setFlipped((f) => !f)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault()
-                setFlipped((f) => !f)
-              }
-            }}
-            className="min-h-56 w-full cursor-pointer select-none text-left"
-          >
-            <Card className="flex min-h-56 flex-col justify-between p-6">
-              <div className="flex items-center gap-2">
-                <LevelBadge level={current.word.level} />
-                <PosTag pos={current.word.pos} />
-                {current.word.gender && (
-                  <Tag>{current.word.gender === 'm' ? '阳性' : '阴性'}</Tag>
-                )}
-              </div>
-              <div className="py-6 text-center">
-                <div className="flex items-center justify-center gap-3">
-                  <div className="text-4xl font-black">
-                    {current.word.spanish}
-                  </div>
-                  <SpeakButton text={current.word.spanish} />
-                </div>
-                <div className="mt-4 min-h-6 text-lg text-bauhaus-ink">
-                  {flipped ? current.word.definition_cn : '· · ·'}
-                </div>
-                {flipped && current.word.pos === 'verb' && (
-                  <div className="mt-4 text-left">
-                    <VerbConjugation verb={current.word.spanish} />
-                  </div>
-                )}
-                {flipped && (
-                  <div className="mt-4 text-left">
-                    {sentencesLoading && (
-                      <p className="text-xs font-bold text-bauhaus-muted">
-                        正在生成例句…
-                      </p>
+        mode === 'exercise' ? (
+          <div className="flex flex-col gap-4">
+            <Card className="p-5">
+              {genLoading && (
+                <p className="py-4 text-center text-sm font-bold text-bauhaus-muted">
+                  正在出题…
+                </p>
+              )}
+
+              {!genLoading && prompt && !gradeResult && (
+                <>
+                  <h2 className="mb-3 font-black">题目</h2>
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="whitespace-pre-line text-lg">{prompt}</p>
+                    {exerciseType === 'translate_es_zh' && (
+                      <SpeakButton text={prompt} />
                     )}
-                    {!sentencesLoading && sentences.length > 0 && (
-                      <div className="flex flex-col gap-1.5">
-                        {sentences.map((s, i) => (
-                          <div
-                            key={i}
-                            className="rounded-sm border-2 border-bauhaus-line bg-bauhaus-paper p-2"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-bold">{s.spanish}</p>
-                              <SpeakButton text={s.spanish} size={13} />
-                            </div>
-                            <p className="mt-0.5 text-xs text-bauhaus-muted">
-                              {s.chinese}
-                            </p>
-                          </div>
-                        ))}
+                  </div>
+                  <textarea
+                    value={answer}
+                    onChange={(e) => setAnswer(e.target.value)}
+                    placeholder="在这里写下你的答案…"
+                    rows={4}
+                    className="mt-4 w-full rounded-sm border-2 border-bauhaus-black bg-white px-3 py-2 text-lg font-bold outline-none focus:border-bauhaus-blue"
+                  />
+                  <div className="mt-1 text-right text-xs font-bold text-bauhaus-muted">
+                    {answer.trim() !== '' ? `已输入 ${answer.trim().length} 字` : ''}
+                  </div>
+                  <Button
+                    className="mt-3 w-full"
+                    onClick={submitExercise}
+                    disabled={grading || answer.trim() === ''}
+                  >
+                    {grading ? '批改中…' : '提交批改'}
+                  </Button>
+                </>
+              )}
+
+              {gradeResult && (
+                <>
+                  <div
+                    className={
+                      'px-4 py-3 text-lg font-black text-white ' +
+                      (gradeResult.correct ? 'bg-bauhaus-blue' : 'bg-bauhaus-red')
+                    }
+                  >
+                    {gradeResult.correct ? '✓ 正确' : '✗ 错误'}
+                  </div>
+                  <div className="pt-4">
+                    <p className="whitespace-pre-line text-sm leading-relaxed">
+                      {gradeResult.feedback}
+                    </p>
+                    {gradeResult.model_answer && (
+                      <div className="mt-3 rounded-sm bg-bauhaus-paper p-3">
+                        <div className="text-xs font-bold text-bauhaus-muted">
+                          参考答案
+                        </div>
+                        <div className="mt-1 flex items-center gap-2">
+                          <span className="text-lg font-bold">
+                            {gradeResult.model_answer}
+                          </span>
+                          {exerciseType === 'translate_zh_es' && (
+                            <SpeakButton text={gradeResult.model_answer} size={14} />
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
-                )}
-              </div>
-              <div className="text-center text-xs font-bold text-bauhaus-muted">
-                {flipped
-                  ? '第 ' + (idx + 1) + ' / ' + due.length + ' 个'
-                  : '点击翻面看释义'}
-              </div>
+                  <Button
+                    className="mt-4 w-full"
+                    onClick={() => submitReview(gradeResult.correct ? 4 : 2)}
+                  >
+                    下一个
+                  </Button>
+                </>
+              )}
             </Card>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" onClick={() => submitReview(2)}>
-              不认识
-            </Button>
-            <Button onClick={() => submitReview(4)}>认识</Button>
+            {exerciseError && (
+              <Card className="border-bauhaus-red p-4">
+                <p className="text-sm font-bold text-bauhaus-red">{exerciseError}</p>
+              </Card>
+            )}
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setFlipped((f) => !f)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setFlipped((f) => !f)
+                }
+              }}
+              className="min-h-56 w-full cursor-pointer select-none text-left"
+            >
+              <Card className="flex min-h-56 flex-col justify-between p-6">
+                <div className="flex items-center gap-2">
+                  <LevelBadge level={current.word.level} />
+                  <PosTag pos={current.word.pos} />
+                  {current.word.gender && (
+                    <Tag>{current.word.gender === 'm' ? '阳性' : '阴性'}</Tag>
+                  )}
+                </div>
+                <div className="py-6 text-center">
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="text-4xl font-black">
+                      {current.word.spanish}
+                    </div>
+                    <SpeakButton text={current.word.spanish} />
+                  </div>
+                  <div className="mt-4 min-h-6 text-lg text-bauhaus-ink">
+                    {flipped ? current.word.definition_cn : '· · ·'}
+                  </div>
+                  {flipped && current.word.pos === 'verb' && (
+                    <div className="mt-4 text-left">
+                      <VerbConjugation verb={current.word.spanish} />
+                    </div>
+                  )}
+                  {flipped && (
+                    <div className="mt-4 text-left">
+                      {sentencesLoading && (
+                        <p className="text-xs font-bold text-bauhaus-muted">
+                          正在生成例句…
+                        </p>
+                      )}
+                      {!sentencesLoading && sentences.length > 0 && (
+                        <div className="flex flex-col gap-1.5">
+                          {sentences.map((s, i) => (
+                            <div
+                              key={i}
+                              className="rounded-sm border-2 border-bauhaus-line bg-bauhaus-paper p-2"
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-sm font-bold">{s.spanish}</p>
+                                <SpeakButton text={s.spanish} size={13} />
+                              </div>
+                              <p className="mt-0.5 text-xs text-bauhaus-muted">
+                                {s.chinese}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="text-center text-xs font-bold text-bauhaus-muted">
+                  {flipped
+                    ? '第 ' + (idx + 1) + ' / ' + due.length + ' 个'
+                    : '点击翻面看释义'}
+                </div>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button variant="outline" onClick={() => submitReview(2)}>
+                不认识
+              </Button>
+              <Button onClick={() => submitReview(4)}>认识</Button>
+            </div>
+          </div>
+        )
       ) : (
         !loading && (
           <Card className="p-6 text-center shadow-none">

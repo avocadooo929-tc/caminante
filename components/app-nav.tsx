@@ -3,12 +3,11 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
-import { BookIcon, LayersIcon, LibraryIcon, PencilIcon, UserIcon } from './icons'
+import { BookIcon, LayersIcon, LibraryIcon, UserIcon } from './icons'
 
 const TABS = [
   { href: '/palabras', label: '单词', icon: BookIcon },
   { href: '/vocabulario', label: '词库', icon: LibraryIcon },
-  { href: '/practica', label: '练习', icon: PencilIcon },
   { href: '/gramatica', label: '语法', icon: LayersIcon },
   { href: '/perfil', label: '我的', icon: UserIcon },
 ]
