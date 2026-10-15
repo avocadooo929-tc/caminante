@@ -127,17 +127,19 @@ export default function PalabrasPage() {
 
   const current = due[idx]
 
-  // 练习题目（本地生成，不耗 AI；只有批改时才调 AI）
-  const exercisePrompt = current
+  // 练习题目：用例句（句子），中译西给中文句子、西译中给西语句子
+  const exerciseSentence = sentences[0] ?? null
+
+  const exercisePrompt = exerciseSentence
     ? exerciseType === 'translate_zh_es'
-      ? `把下面的中文翻译成西班牙语：${current.word.definition_cn}`
-      : `把下面的西班牙语翻译成中文：${current.word.spanish}`
+      ? `把下面的中文句子翻译成西班牙语：${exerciseSentence.chinese}`
+      : `把下面的西班牙语句子翻译成中文：${exerciseSentence.spanish}`
     : null
 
-  const expectedHint = current
+  const expectedHint = exerciseSentence
     ? exerciseType === 'translate_zh_es'
-      ? current.word.spanish
-      : current.word.definition_cn
+      ? exerciseSentence.spanish
+      : exerciseSentence.chinese
     : null
 
   async function submitExercise() {
@@ -199,11 +201,11 @@ export default function PalabrasPage() {
   }
 
   useEffect(() => {
-    if (flipped && current) {
+    if (current) {
       loadSentencesFor(current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [flipped, current?.id])
+  }, [current?.id])
 
   const refreshStats = useCallback(async () => {
     const supabase = createClient()
@@ -387,13 +389,23 @@ export default function PalabrasPage() {
               做对记「认识」，做错记「不认识」
             </p>
 
-            {exerciseType === 'translate_zh_es' ? (
-              <p className="text-lg font-bold">{current.word.definition_cn}</p>
+            {exerciseSentence ? (
+              exerciseType === 'translate_zh_es' ? (
+                <p className="text-lg font-bold leading-relaxed">
+                  {exerciseSentence.chinese}
+                </p>
+              ) : (
+                <div className="flex items-start gap-2">
+                  <p className="text-lg font-bold leading-relaxed">
+                    {exerciseSentence.spanish}
+                  </p>
+                  <SpeakButton text={exerciseSentence.spanish} size={14} />
+                </div>
+              )
             ) : (
-              <div className="flex items-center gap-2">
-                <p className="text-lg font-bold">{current.word.spanish}</p>
-                <SpeakButton text={current.word.spanish} size={14} />
-              </div>
+              <p className="py-2 text-center text-sm font-bold text-bauhaus-muted">
+                {sentencesLoading ? '正在准备例句…' : '暂无例句'}
+              </p>
             )}
 
             <textarea
@@ -411,7 +423,7 @@ export default function PalabrasPage() {
               <Button
                 className="mt-3 w-full"
                 onClick={submitExercise}
-                disabled={grading || answer.trim() === ''}
+                disabled={grading || answer.trim() === '' || !exerciseSentence}
               >
                 {grading ? '批改中…' : '提交批改'}
               </Button>
