@@ -91,6 +91,7 @@ export function WordDetail({ id }: { id: string }) {
       .select('spanish, chinese')
       .eq('word_id', wordId)
       .eq('level', lv)
+      .eq('kind', 'flashcard')
       .order('created_at', { ascending: true })
     return (data as ExampleSentence[]) ?? []
   }

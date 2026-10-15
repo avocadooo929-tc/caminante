@@ -5,21 +5,19 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { ExampleSentence, ExerciseType, Level, Word } from '@/lib/types'
 import { levelFromValue } from '@/lib/levels'
-import { nextDueAt, review } from '@/lib/srs'
+import { nextDueAt, nextProficiency } from '@/lib/srs'
 import { loadWordMap } from '@/lib/manual-words'
+import { checkInToday, logStudy } from '@/lib/study'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { LevelBadge, PosTag, Tag } from '@/components/ui/badge'
 import { SpeakButton } from '@/components/speak-button'
 import { DailyProgress } from '@/components/daily-progress'
 import { VerbConjugation } from '@/components/verb-conjugation'
-import { logStudy } from '@/lib/study'
 
 interface DueItem {
   id: string
-  ease_factor: number
-  interval_days: number
-  correct_count: number
+  proficiency: number
   word_id: string
   word: Word
 }
@@ -35,14 +33,18 @@ export default function PalabrasPage() {
   const [due, setDue] = useState<DueItem[]>([])
   const [idx, setIdx] = useState(0)
   const [flipped, setFlipped] = useState(false)
-  const [stats, setStats] = useState({ due: 0, learning: 0, known: 0 })
   const [progressKey, setProgressKey] = useState(0)
   const [userLevel, setUserLevel] = useState<Level>('A1')
   const [exerciseType, setExerciseType] = useState<ExerciseType>('translate_zh_es')
+
+  // 闪卡例句（kind=flashcard）
   const [sentences, setSentences] = useState<ExampleSentence[]>([])
   const [sentencesLoading, setSentencesLoading] = useState(false)
+  // 练习栏目例句（kind=exercise，与闪卡不同）
+  const [exerciseSentence, setExerciseSentence] = useState<ExampleSentence | null>(null)
+  const [exerciseLoading, setExerciseLoading] = useState(false)
 
-  // 练习（方式二）状态
+  // 练习作答状态
   const [answer, setAnswer] = useState('')
   const [grading, setGrading] = useState(false)
   const [gradeResult, setGradeResult] = useState<GradeResult | null>(null)
@@ -64,60 +66,31 @@ export default function PalabrasPage() {
     if (prof?.exercise_type) setExerciseType(prof.exercise_type as ExerciseType)
 
     const now = new Date().toISOString()
-    const [dueRes, dueCountRes, learningRes, knownRes, wordMap] = await Promise.all([
+    const [dueRes, wordMap] = await Promise.all([
       supabase
         .from('user_words')
-        .select('id, ease_factor, interval_days, correct_count, word_id')
+        .select('id, proficiency, word_id')
         .eq('user_id', user.id)
         .lte('due_at', now)
         .order('due_at', { ascending: true })
         .limit(30),
-      supabase
-        .from('user_words')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .lte('due_at', now),
-      supabase
-        .from('user_words')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'learning'),
-      supabase
-        .from('user_words')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'known'),
       loadWordMap(),
     ])
 
     const rows = (dueRes.data ?? []) as unknown as {
       id: string
-      ease_factor: number
-      interval_days: number
-      correct_count: number
+      proficiency: number
       word_id: string
     }[]
     const items: DueItem[] = rows
       .map((r) => {
         const word = wordMap.get(r.word_id)
         if (!word) return null
-        return {
-          id: r.id,
-          ease_factor: r.ease_factor,
-          interval_days: r.interval_days,
-          correct_count: r.correct_count,
-          word_id: r.word_id,
-          word,
-        }
+        return { id: r.id, proficiency: r.proficiency, word_id: r.word_id, word }
       })
       .filter((d): d is DueItem => d !== null)
 
     setDue(items)
-    setStats({
-      due: dueCountRes.count ?? 0,
-      learning: learningRes.count ?? 0,
-      known: knownRes.count ?? 0,
-    })
     setLoading(false)
   }, [])
 
@@ -127,8 +100,88 @@ export default function PalabrasPage() {
 
   const current = due[idx]
 
-  // 练习题目：用例句（句子），中译西给中文句子、西译中给西语句子
-  const exerciseSentence = sentences[0] ?? null
+  async function loadSentencesFor(item: DueItem) {
+    const supabase = createClient()
+    setSentencesLoading(true)
+    setSentences([])
+    try {
+      const { data: cached } = await supabase
+        .from('sentences')
+        .select('spanish, chinese')
+        .eq('word_id', item.word_id)
+        .eq('level', userLevel)
+        .eq('kind', 'flashcard')
+        .order('created_at', { ascending: true })
+      let list = (cached as ExampleSentence[]) ?? []
+      if (list.length === 0) {
+        const res = await fetch('/api/ai/sentences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wordId: item.word_id,
+            word: item.word.spanish,
+            pos: item.word.pos,
+            level: userLevel,
+            kind: 'flashcard',
+          }),
+        })
+        const data = await res.json()
+        if (res.ok) list = (data.sentences as ExampleSentence[]) ?? []
+      }
+      setSentences(list)
+    } catch {
+      setSentences([])
+    } finally {
+      setSentencesLoading(false)
+    }
+  }
+
+  async function loadExerciseSentenceFor(item: DueItem) {
+    const supabase = createClient()
+    setExerciseLoading(true)
+    setExerciseSentence(null)
+    try {
+      const { data: cached } = await supabase
+        .from('sentences')
+        .select('spanish, chinese')
+        .eq('word_id', item.word_id)
+        .eq('level', userLevel)
+        .eq('kind', 'exercise')
+        .order('created_at', { ascending: true })
+        .limit(1)
+      let s = ((cached ?? [])[0] as ExampleSentence | undefined) ?? null
+      if (!s) {
+        const res = await fetch('/api/ai/sentences', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wordId: item.word_id,
+            word: item.word.spanish,
+            pos: item.word.pos,
+            level: userLevel,
+            kind: 'exercise',
+          }),
+        })
+        const data = await res.json()
+        if (res.ok && Array.isArray(data.sentences) && data.sentences.length > 0) {
+          s = data.sentences[0] as ExampleSentence
+        }
+      }
+      setExerciseSentence(s)
+    } catch {
+      setExerciseSentence(null)
+    } finally {
+      setExerciseLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (current) {
+      loadSentencesFor(current)
+      loadExerciseSentenceFor(current)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [current?.id])
 
   const exercisePrompt = exerciseSentence
     ? exerciseType === 'translate_zh_es'
@@ -166,138 +219,75 @@ export default function PalabrasPage() {
     }
   }
 
-  async function loadSentencesFor(item: DueItem) {
-    const supabase = createClient()
-    setSentencesLoading(true)
-    setSentences([])
-    try {
-      const { data: cached } = await supabase
-        .from('sentences')
-        .select('spanish, chinese')
-        .eq('word_id', item.word_id)
-        .eq('level', userLevel)
-        .order('created_at', { ascending: true })
-      let list = (cached as ExampleSentence[]) ?? []
-      if (list.length === 0) {
-        const res = await fetch('/api/ai/sentences', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            wordId: item.word_id,
-            word: item.word.spanish,
-            pos: item.word.pos,
-            level: userLevel,
-          }),
-        })
-        const data = await res.json()
-        if (res.ok) list = (data.sentences as ExampleSentence[]) ?? []
-      }
-      setSentences(list)
-    } catch {
-      setSentences([])
-    } finally {
-      setSentencesLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    if (current) {
-      loadSentencesFor(current)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [current?.id])
-
-  const refreshStats = useCallback(async () => {
+  async function maybeCheckIn() {
     const supabase = createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return
     const now = new Date().toISOString()
-    const [dueCountRes, learningRes, knownRes] = await Promise.all([
+    const [newRes, reviewRes] = await Promise.all([
       supabase
         .from('user_words')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
+        .eq('proficiency', 0)
         .lte('due_at', now),
       supabase
         .from('user_words')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
-        .eq('status', 'learning'),
-      supabase
-        .from('user_words')
-        .select('id', { count: 'exact', head: true })
-        .eq('user_id', user.id)
-        .eq('status', 'known'),
+        .gte('proficiency', 1)
+        .lte('due_at', now),
     ])
-    setStats({
-      due: dueCountRes.count ?? 0,
-      learning: learningRes.count ?? 0,
-      known: knownRes.count ?? 0,
-    })
-  }, [])
+    if ((newRes.count ?? 0) + (reviewRes.count ?? 0) === 0) {
+      await checkInToday()
+    }
+  }
 
-  async function submitReview(quality: number) {
+  async function submitReview(correct: boolean) {
     if (!current) return
-    const next = review(
-      {
-        easeFactor: current.ease_factor,
-        intervalDays: current.interval_days,
-        correctCount: current.correct_count,
-      },
-      quality
-    )
+    const proficiency = nextProficiency(current.proficiency, correct)
     const supabase = createClient()
     await supabase
       .from('user_words')
       .update({
-        ease_factor: next.easeFactor,
-        interval_days: next.intervalDays,
-        correct_count: next.correctCount,
-        due_at: nextDueAt(next.intervalDays).toISOString(),
-        status:
-          quality >= 3
-            ? next.correctCount >= 3
-              ? 'known'
-              : 'learning'
-            : 'learning',
+        proficiency,
+        due_at: nextDueAt(proficiency).toISOString(),
         last_reviewed_at: new Date().toISOString(),
       })
       .eq('id', current.id)
 
-    await logStudy({ reviewed: 1 })
+    if (correct) await logStudy({ reviewed: 1 })
+
     setProgressKey((k) => k + 1)
     setFlipped(false)
     setAnswer('')
     setGradeResult(null)
-    if (idx + 1 < due.length) {
-      setIdx(idx + 1)
+
+    if (correct) {
+      // 认识：前进到下一个
+      if (idx + 1 < due.length) setIdx(idx + 1)
+      else {
+        setDue([])
+        setIdx(0)
+      }
     } else {
-      setDue([])
-      setIdx(0)
+      // 不认识：重新加入学习队列最后，熟练度已清 0
+      const wasLast = idx === due.length - 1
+      const next = [...due]
+      const [item] = next.splice(idx, 1)
+      next.push(item)
+      setDue(next)
+      if (wasLast) setIdx(0)
     }
-    await refreshStats()
+
+    await maybeCheckIn()
   }
 
   return (
     <div className="flex flex-col gap-6">
       <DailyProgress refreshKey={progressKey} />
-
-      {/* 统计 */}
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: '待复习', value: stats.due, color: 'text-bauhaus-red' },
-          { label: '学习中', value: stats.learning, color: 'text-bauhaus-yellow' },
-        ].map((s) => (
-          <Card key={s.label} className="p-3 text-center shadow-none">
-            <div className={`text-3xl font-black ${s.color}`}>{s.value}</div>
-            <div className="mt-1 text-xs font-bold text-bauhaus-muted">
-              {s.label}
-            </div>
-          </Card>
-        ))}
-      </div>
 
       {current ? (
         <div className="flex flex-col gap-4">
@@ -364,17 +354,19 @@ export default function PalabrasPage() {
                 )}
               </div>
               <div className="text-center text-xs font-bold text-bauhaus-muted">
-                {flipped ? '第 ' + (idx + 1) + ' / ' + due.length + ' 个' : '点击翻面看释义'}
+                {flipped
+                  ? '第 ' + (idx + 1) + ' / ' + due.length + ' 个'
+                  : '点击翻面看释义'}
               </div>
             </Card>
           </div>
 
           {/* 认识 / 不认识（中间） */}
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" onClick={() => submitReview(2)}>
+            <Button variant="outline" onClick={() => submitReview(false)}>
               不认识
             </Button>
-            <Button onClick={() => submitReview(4)}>认识</Button>
+            <Button onClick={() => submitReview(true)}>认识</Button>
           </div>
 
           {/* 练习栏目（下） */}
@@ -404,7 +396,7 @@ export default function PalabrasPage() {
               )
             ) : (
               <p className="py-2 text-center text-sm font-bold text-bauhaus-muted">
-                {sentencesLoading ? '正在准备例句…' : '暂无例句'}
+                {exerciseLoading ? '正在准备例句…' : '暂无例句'}
               </p>
             )}
 
@@ -457,7 +449,7 @@ export default function PalabrasPage() {
                 )}
                 <Button
                   className="mt-4 w-full"
-                  onClick={() => submitReview(gradeResult.correct ? 4 : 2)}
+                  onClick={() => submitReview(gradeResult.correct)}
                 >
                   下一个
                 </Button>
@@ -474,11 +466,9 @@ export default function PalabrasPage() {
       ) : (
         !loading && (
           <Card className="p-6 text-center shadow-none">
-            <div className="text-2xl font-black">今日复习完成 🎉</div>
+            <div className="text-2xl font-black">今日学习完成 🎉</div>
             <p className="mt-2 text-sm text-bauhaus-muted">
-              {stats.learning + stats.known === 0
-                ? '先去「词库」添加一些单词开始学习吧'
-                : '暂时没有到期的单词，休息一下'}
+              已自动打卡。休息一下，或去「词库」添加新词。
             </p>
             <Link
               href="/vocabulario"

@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { todayStr } from '@/lib/study'
+import { studyDateStr } from '@/lib/study'
 import { Card } from './ui/card'
 
 export function DailyProgress({ refreshKey = 0 }: { refreshKey?: number }) {
-  const [goal, setGoal] = useState(20)
-  const [added, setAdded] = useState(0)
-  const [reviewed, setReviewed] = useState(0)
+  const [newCount, setNewCount] = useState(0) // 待新学
+  const [reviewCount, setReviewCount] = useState(0) // 待复习
+  const [learned, setLearned] = useState(0) // 已学习
 
   useEffect(() => {
     async function load() {
@@ -18,38 +18,59 @@ export function DailyProgress({ refreshKey = 0 }: { refreshKey?: number }) {
       } = await supabase.auth.getUser()
       if (!user) return
 
-      const [profRes, logRes] = await Promise.all([
-        supabase.from('profiles').select('daily_goal').eq('id', user.id).single(),
+      const now = new Date().toISOString()
+      const [newRes, reviewRes, logRes] = await Promise.all([
+        supabase
+          .from('user_words')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .eq('proficiency', 0)
+          .lte('due_at', now),
+        supabase
+          .from('user_words')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id)
+          .gte('proficiency', 1)
+          .lte('due_at', now),
         supabase
           .from('study_logs')
-          .select('words_added, words_reviewed')
+          .select('words_reviewed')
           .eq('user_id', user.id)
-          .eq('study_date', todayStr())
+          .eq('study_date', studyDateStr())
           .maybeSingle(),
       ])
 
-      if (profRes.data?.daily_goal != null) setGoal(profRes.data.daily_goal)
-      setAdded(logRes.data?.words_added ?? 0)
-      setReviewed(logRes.data?.words_reviewed ?? 0)
+      setNewCount(newRes.count ?? 0)
+      setReviewCount(reviewRes.count ?? 0)
+      setLearned(logRes.data?.words_reviewed ?? 0)
     }
     load()
   }, [refreshKey])
 
-  const pct = goal > 0 ? Math.min(100, Math.round((added / goal) * 100)) : 0
+  const remaining = newCount + reviewCount
 
   return (
     <Card className="p-4 shadow-none">
       <div className="flex items-center justify-between">
         <span className="text-sm font-black">今日学习</span>
         <span className="text-xs font-bold text-bauhaus-muted">
-          新学 {added} / {goal} 词
+          {remaining === 0 ? '已完成 ✓' : `还剩 ${remaining} 词`}
         </span>
       </div>
-      <div className="mt-2 h-3 w-full overflow-hidden rounded-sm border-2 border-bauhaus-black bg-white">
-        <div className="h-full bg-bauhaus-blue" style={{ width: `${pct}%` }} />
-      </div>
-      <div className="mt-1 text-xs font-bold text-bauhaus-muted">
-        今日复习 {reviewed} 次
+      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+        {[
+          { label: '待新学', value: newCount, color: 'text-bauhaus-red' },
+          { label: '待复习', value: reviewCount, color: 'text-bauhaus-yellow' },
+          { label: '已学习', value: learned, color: 'text-bauhaus-blue' },
+        ].map((s) => (
+          <div
+            key={s.label}
+            className="rounded-sm border-2 border-bauhaus-line p-2"
+          >
+            <div className={`text-2xl font-black ${s.color}`}>{s.value}</div>
+            <div className="text-xs font-bold text-bauhaus-muted">{s.label}</div>
+          </div>
+        ))}
       </div>
     </Card>
   )

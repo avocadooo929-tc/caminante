@@ -47,6 +47,7 @@ export function CheckinCalendar() {
       .from('study_logs')
       .select('study_date')
       .eq('user_id', user.id)
+      .eq('checked', true)
       .gte('study_date', first)
       .lte('study_date', last)
 

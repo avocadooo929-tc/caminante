@@ -203,7 +203,7 @@ export default function VocabularioPage() {
       {
         user_id: userId,
         word_id: wordId,
-        status: 'new',
+        proficiency: 0,
         due_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,word_id' }
@@ -244,7 +244,7 @@ export default function VocabularioPage() {
       ordered.map((word_id) => ({
         user_id: userId,
         word_id,
-        status: 'new',
+        proficiency: 0,
         due_at: new Date().toISOString(),
       })),
       { onConflict: 'user_id,word_id' }
@@ -309,7 +309,7 @@ export default function VocabularioPage() {
       {
         user_id: userId,
         word_id: slug,
-        status: 'new',
+        proficiency: 0,
         due_at: new Date().toISOString(),
       },
       { onConflict: 'user_id,word_id' }

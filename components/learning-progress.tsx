@@ -8,7 +8,7 @@ import { loadWordMap } from '@/lib/manual-words'
 import { Card } from './ui/card'
 
 interface Row {
-  status: string
+  proficiency: number
   due_at: string
   word_id: string
 }
@@ -40,7 +40,7 @@ export function LearningProgress() {
       for (let from = 0; ; from += 1000) {
         const { data } = await supabase
           .from('user_words')
-          .select('status, due_at, word_id')
+          .select('proficiency, due_at, word_id')
           .eq('user_id', user.id)
           .range(from, from + 999)
         const page = (data ?? []) as unknown as Row[]
@@ -56,10 +56,10 @@ export function LearningProgress() {
       const lvl: Record<Level, number> = { ...EMPTY_LEVEL }
 
       for (const r of rows) {
-        if (r.status === 'known') known++
-        else if (r.status === 'learning') learning++
+        if (r.proficiency >= 6) known++
+        else if (r.proficiency >= 1) learning++
         else fresh++
-        if (r.due_at <= now) due++
+        if (r.proficiency < 6 && r.due_at <= now) due++
         const l = wordMap.get(r.word_id)?.level
         if (l && l in lvl) lvl[l]++
       }

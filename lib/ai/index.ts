@@ -1,6 +1,7 @@
 import type { ExerciseType, ExampleSentence, Level } from '../types'
 import { chatJSON } from './deepseek'
 import {
+  buildExerciseSentenceUserPrompt,
   buildExerciseSystemPrompt,
   buildExerciseUserPrompt,
   buildGradeSystemPrompt,
@@ -29,6 +30,7 @@ export async function generateSentences(opts: {
   pos: string
   level: Level
   knownWords: string[]
+  existing?: string[]
 }): Promise<ExampleSentence[]> {
   const data = await chatJSON<{ sentences: ExampleSentence[] }>([
     { role: 'system', content: buildSentenceSystemPrompt() },
@@ -38,11 +40,38 @@ export async function generateSentences(opts: {
         opts.word,
         opts.pos,
         opts.level,
-        opts.knownWords
+        opts.knownWords,
+        opts.existing ?? []
       ),
     },
   ])
   return Array.isArray(data.sentences) ? data.sentences : []
+}
+
+/** 生成练习栏目的 1 条例句（优先疑问句，且与闪卡例句不同） */
+export async function generateExerciseSentence(opts: {
+  word: string
+  pos: string
+  level: Level
+  knownWords: string[]
+  existing?: string[]
+}): Promise<ExampleSentence | null> {
+  const data = await chatJSON<{ sentences: ExampleSentence[] }>([
+    { role: 'system', content: buildSentenceSystemPrompt() },
+    {
+      role: 'user',
+      content: buildExerciseSentenceUserPrompt(
+        opts.word,
+        opts.pos,
+        opts.level,
+        opts.knownWords,
+        opts.existing ?? []
+      ),
+    },
+  ])
+  return Array.isArray(data.sentences) && data.sentences.length > 0
+    ? data.sentences[0]
+    : null
 }
 
 export async function gradeAnswer(opts: {

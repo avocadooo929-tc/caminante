@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { generateSentences } from '@/lib/ai'
+import { generateExerciseSentence, generateSentences } from '@/lib/ai'
 import { isLevel } from '@/lib/levels'
 import { getStaticWord } from '@/lib/words-data'
 import { createClient } from '@/lib/supabase/server'
@@ -18,6 +18,7 @@ export async function POST(request: Request) {
     word?: unknown
     pos?: unknown
     level?: unknown
+    kind?: unknown
   }
   try {
     body = await request.json()
@@ -27,16 +28,18 @@ export async function POST(request: Request) {
 
   const wordId = typeof body.wordId === 'string' ? body.wordId : null
   const level = isLevel(body.level) ? body.level : null
+  const kind = body.kind === 'exercise' ? 'exercise' : 'flashcard'
   if (!wordId || !level) {
     return NextResponse.json({ error: '缺少 wordId 或 level' }, { status: 400 })
   }
 
-  // 1. 命中缓存则直接返回（同词同难度不重复计费）
+  // 1. 命中缓存则直接返回（同词同难度同 kind 不重复计费）
   const { data: cached } = await supabase
     .from('sentences')
     .select('spanish, chinese')
     .eq('word_id', wordId)
     .eq('level', level)
+    .eq('kind', kind)
     .order('created_at', { ascending: true })
   if (cached && cached.length > 0) {
     return NextResponse.json({ sentences: cached })
@@ -56,7 +59,16 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: '单词不存在' }, { status: 404 })
   }
 
-  // 3. 取学习者已掌握词汇（user_words 里的 slug → 从静态/手动词表解析 spanish）
+  // 3. 该词已有的全部例句（两种 kind 都算），生成时避免重复
+  const { data: existingRows } = await supabase
+    .from('sentences')
+    .select('spanish')
+    .eq('word_id', wordId)
+  const existing = ((existingRows ?? []) as unknown as { spanish: string }[]).map(
+    (r) => r.spanish
+  )
+
+  // 4. 取学习者已掌握词汇（user_words 里的 slug → 从静态/手动词表解析 spanish）
   const { data: knownRows } = await supabase
     .from('user_words')
     .select('word_id')
@@ -82,15 +94,15 @@ export async function POST(request: Request) {
     }
   }
 
-  // 4. 调用 AI 生成
+  // 5. 调用 AI 生成（flashcard 3 句 / exercise 1 句疑问句）
   let sentences: { spanish: string; chinese: string }[]
   try {
-    sentences = await generateSentences({
-      word,
-      pos,
-      level,
-      knownWords,
-    })
+    if (kind === 'exercise') {
+      const s = await generateExerciseSentence({ word, pos, level, knownWords, existing })
+      sentences = s ? [s] : []
+    } else {
+      sentences = await generateSentences({ word, pos, level, knownWords, existing })
+    }
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : '生成失败' },
@@ -98,12 +110,13 @@ export async function POST(request: Request) {
     )
   }
 
-  // 5. 落库缓存
+  // 6. 落库缓存
   if (sentences.length > 0) {
     await supabase.from('sentences').insert(
       sentences.map((s) => ({
         word_id: wordId,
         level,
+        kind,
         spanish: s.spanish,
         chinese: s.chinese,
       }))

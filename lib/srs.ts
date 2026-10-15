@@ -1,44 +1,24 @@
-export interface SrsState {
-  easeFactor: number
-  intervalDays: number
-  correctCount: number
+export const MAX_PROFICIENCY = 6
+
+// 标准间隔：熟练度 0-6 → 下次复习天数（0=当天，6=已掌握约一年后再见）
+const DAYS_BY_PROFICIENCY: number[] = [0, 1, 3, 7, 14, 30, 365]
+
+/** 认识 → 熟练度 +1（封顶 6）；不认识 → 熟练度清 0 */
+export function nextProficiency(current: number, correct: boolean): number {
+  if (!correct) return 0
+  return Math.min(MAX_PROFICIENCY, current + 1)
 }
 
-export const DEFAULT_EASE = 2.5
-export const MIN_EASE = 1.3
-
-/**
- * SM-2 间隔重复算法。
- * @param quality 0-5：>=3 表示记得，<3 表示忘记。我们用 4=认识、2=不认识。
- */
-export function review(current: SrsState, quality: number): SrsState {
-  const q = Math.max(0, Math.min(5, quality))
-  let { easeFactor, intervalDays, correctCount } = current
-
-  easeFactor = easeFactor + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
-  if (easeFactor < MIN_EASE) easeFactor = MIN_EASE
-
-  if (q < 3) {
-    correctCount = 0
-    intervalDays = 0 // 忘记的单词稍后/当天再次出现
-  } else {
-    correctCount += 1
-    if (correctCount === 1) intervalDays = 1
-    else if (correctCount === 2) intervalDays = 3
-    else intervalDays = Math.max(1, Math.round(intervalDays * easeFactor))
-  }
-
-  return { easeFactor, intervalDays, correctCount }
-}
-
-export function nextDueAt(intervalDays: number): Date {
+/** 根据熟练度计算下次复习时间 */
+export function nextDueAt(proficiency: number): Date {
+  const p = Math.max(0, Math.min(MAX_PROFICIENCY, proficiency))
+  const days = DAYS_BY_PROFICIENCY[p]
   const d = new Date()
-  if (intervalDays <= 0) {
-    // 忘记的词：10 分钟后再次复习
-    d.setMinutes(d.getMinutes() + 10)
-  } else {
-    d.setDate(d.getDate() + intervalDays)
-    d.setHours(4, 0, 0, 0)
+  if (days === 0) {
+    // 当天：立即到期（尚未接触 / 刚忘记的词马上复习）
+    return d
   }
+  d.setDate(d.getDate() + days)
+  d.setHours(4, 0, 0, 0)
   return d
 }

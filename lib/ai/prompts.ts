@@ -15,8 +15,10 @@ export function buildSentenceSystemPrompt(): string {
     '{"sentences":[{"spanish":"...","chinese":"..."}]}',
     '要求：',
     '1. 每个例句自然、地道、语法正确，并真实体现目标词的常见用法。',
-    '2. chinese 字段给出整句的中文翻译。',
-    '3. 严格限制用词难度（见用户消息中的水平说明），尽量只使用学习者已掌握的词汇。',
+    '2. 句子必须符合正常语言逻辑和日常生活常识，不生成荒谬或自相矛盾的句子。',
+    '3. chinese 字段给出整句的中文翻译。',
+    '4. 严格限制用词难度（见用户消息中的水平说明），尽量只使用学习者已掌握的词汇。',
+    '5. 句子类型要多样：以陈述句为主，适当穿插一般疑问句、特殊疑问句，偶尔用感叹句（大致比例 13:4:2:1）。',
   ].join('\n')
 }
 
@@ -24,17 +26,49 @@ export function buildSentenceUserPrompt(
   word: string,
   pos: string,
   level: Level,
-  knownWords: string[]
+  knownWords: string[],
+  existing: string[] = []
 ): string {
   const known = knownWords.length
     ? knownWords.slice(0, 200).join('、')
     : '（暂无，请使用最基础词汇）'
+  const avoid = existing.length
+    ? `已有例句（不要重复，要生成全新的句子）：\n${existing.slice(0, 50).join('\n')}`
+    : ''
   return [
     `目标词：${word}（词性：${pos}）`,
     `目标难度：${level}。${LEVEL_GUIDE[level]}`,
     `学习者已掌握的词汇：${known}`,
+    avoid,
     '请生成 3 个例句，尽量只使用学习者已掌握的词汇和目标难度范围内的词；若必须引入新词，控制在最少量。',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** 练习栏目的例句：单独生成，优先疑问句，且与闪卡例句不同 */
+export function buildExerciseSentenceUserPrompt(
+  word: string,
+  pos: string,
+  level: Level,
+  knownWords: string[],
+  existing: string[] = []
+): string {
+  const known = knownWords.length
+    ? knownWords.slice(0, 200).join('、')
+    : '（暂无，请使用最基础词汇）'
+  const avoid = existing.length
+    ? `已有例句（不要重复，要生成全新的句子）：\n${existing.slice(0, 50).join('\n')}`
+    : ''
+  return [
+    `目标词：${word}（词性：${pos}）`,
+    `目标难度：${level}。${LEVEL_GUIDE[level]}`,
+    `学习者已掌握的词汇：${known}`,
+    avoid,
+    '请生成 1 个例句，优先使用疑问句（一般疑问句或特殊疑问句），且与闪卡释义里的例句明显不同；符合常识、自然地道。',
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function buildGradeSystemPrompt(): string {
