@@ -1,0 +1,30 @@
+@import "tailwindcss";
+
+@theme {
+  /* ===== Bauhaus 配色 ===== */
+  --color-bauhaus-red: #e63946;
+  --color-bauhaus-red-dark: #c1121f;
+  --color-bauhaus-yellow: #f2c14e;
+  --color-bauhaus-blue: #2a9d8f;
+  --color-bauhaus-blue-dark: #1f7a6f;
+  --color-bauhaus-black: #141414;
+  --color-bauhaus-paper: #faf9f5;
+  --color-bauhaus-card: #ffffff;
+  --color-bauhaus-ink: #1a1a1a;
+  --color-bauhaus-muted: #6b6b6b;
+  --color-bauhaus-line: #e4e1d8;
+
+  /* ===== 几何无衬线字体 + 中文回退 ===== */
+  --font-sans: "Century Gothic", "Avenir Next", "Futura", "Trebuchet MS",
+    "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-bauhaus-paper);
+  color: var(--color-bauhaus-ink);
+  font-family: var(--font-sans);
+}
