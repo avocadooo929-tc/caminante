@@ -121,10 +121,7 @@ export default function PerfilPage() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="mb-1 font-black">练习模式</h2>
-        <p className="mb-3 text-sm text-bauhaus-muted">
-          在「单词」里用练习方式复习时，出哪种题
-        </p>
+        <h2 className="mb-3 font-black">练习模式</h2>
         <div className="flex gap-2">
           {(
             [
@@ -149,10 +146,18 @@ export default function PerfilPage() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="mb-3 font-black">关于</h2>
-        <p className="text-sm leading-relaxed text-bauhaus-muted">
-          Camina（西语「走」）是一个辅助学习西班牙语的 PWA。
-          背单词 · 例句理解 · 造句翻译 · 语法教程。
+        <h2 className="mb-3 font-black">关于Camina</h2>
+        <p className="whitespace-pre-line text-sm leading-relaxed text-bauhaus-muted">
+          {`Caminante, son tus huellas
+el camino y nada más;
+Caminante, no hay camino,
+se hace camino al andar.
+Al andar se hace el camino,
+y al volver la vista atrás
+se ve la senda que nunca
+se ha de volver a pisar.
+Caminante no hay camino
+sino estelas en la mar.`}
         </p>
       </Card>
 
