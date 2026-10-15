@@ -3,9 +3,9 @@ import { ServiceWorkerRegister } from '@/components/service-worker-register'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Camina · 西语学习助手',
+  title: 'Caminante · 西语学习助手',
   description: '背单词、例句理解、造句翻译与语法教程，辅助学习西班牙语。',
-  applicationName: 'Camina',
+  applicationName: 'Caminante',
   icons: {
     icon: '/icon.svg',
     apple: '/apple-touch-icon.png',
@@ -13,7 +13,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'default',
-    title: 'Camina',
+    title: 'Caminante',
   },
 }
 

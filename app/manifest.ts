@@ -2,8 +2,8 @@ import type { MetadataRoute } from 'next'
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'Camina · 西语学习助手',
-    short_name: 'Camina',
+    name: 'Caminante · 西语学习助手',
+    short_name: 'Caminante',
     description: '背单词、例句理解、造句翻译与语法教程',
     start_url: '/',
     display: 'standalone',

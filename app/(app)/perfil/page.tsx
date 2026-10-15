@@ -146,7 +146,7 @@ export default function PerfilPage() {
       </Card>
 
       <Card className="p-6">
-        <h2 className="mb-3 font-black">关于Camina</h2>
+        <h2 className="mb-3 font-black">关于Caminante</h2>
         <p className="whitespace-pre-line text-sm leading-relaxed text-bauhaus-muted">
           {`Caminante, son tus huellas
 el camino y nada más;

@@ -1,4 +1,4 @@
--- Camina 数据库初始化（在 Supabase SQL Editor 中运行本文件，再运行 seed 文件）
+-- Caminante 数据库初始化（在 Supabase SQL Editor 中运行本文件，再运行 seed 文件）
 
 create extension if not exists pgcrypto;
 

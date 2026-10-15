@@ -1,4 +1,4 @@
--- Camina 每日学习功能（在 0001 之后运行，可重复运行）
+-- Caminante 每日学习功能（在 0001 之后运行，可重复运行）
 
 -- 用户每日学习目标（新词数）
 alter table public.profiles add column if not exists daily_goal int not null default 20;

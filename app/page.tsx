@@ -16,7 +16,7 @@ export default function LandingPage() {
         <div className="flex items-center gap-3">
           <span className="inline-block h-6 w-6 rounded-full bg-bauhaus-red" />
           <h1 className="text-6xl font-black tracking-tight text-bauhaus-black">
-            CAMINA
+            CAMINANTE
           </h1>
           <span className="inline-block h-6 w-6 rotate-45 bg-bauhaus-yellow" />
         </div>

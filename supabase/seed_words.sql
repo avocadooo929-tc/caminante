@@ -1,4 +1,4 @@
--- Camina 内置高频词表（入门种子，可继续扩充）
+-- Caminante 内置高频词表（入门种子，可继续扩充）
 -- 在 SQL Editor 中运行（可重复运行，冲突自动跳过）
 
 insert into public.words (spanish, pos, definition_cn, level, frequency_rank, source, gender) values

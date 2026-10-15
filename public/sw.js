@@ -1,5 +1,5 @@
-// Camina 离线缓存 Service Worker
-const CACHE = 'camina-v1'
+// Caminante 离线缓存 Service Worker
+const CACHE = 'caminante-v1'
 
 const PRECACHE = [
   '/',

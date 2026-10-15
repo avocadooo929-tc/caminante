@@ -1,4 +1,4 @@
--- Camina 3000 词库 · B1（进阶级，约 650 词）
+-- Caminante 3000 词库 · B1（进阶级，约 650 词）
 -- 可重复运行：冲突自动跳过。
 
 insert into public.words (spanish, pos, definition_cn, level, source, gender) values

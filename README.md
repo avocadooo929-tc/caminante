@@ -1,4 +1,4 @@
-# Camina · 西语学习助手
+# Caminante · 西语学习助手
 
 辅助学习西班牙语的 PWA（可安装到手机主屏幕）。一套代码，同时支持 **iPhone（Safari）** 和 **Windows（Chrome/Edge）**。
 

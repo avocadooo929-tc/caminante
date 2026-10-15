@@ -1,4 +1,4 @@
--- Camina 方向B：词表静态化 + 稳定词 ID（slug）
+-- Caminante 方向B：词表静态化 + 稳定词 ID（slug）
 -- ⚠️ 本迁移只运行一次（在 0001_init.sql + 0002_daily.sql 之后）。
 -- 效果：内置/教材词移到应用静态数据 data/words.json；数据库 words 只留手动词；
 --       user_words.word_id / sentences.word_id 由 uuid 改为 text(slug)，保留全部背词进度。

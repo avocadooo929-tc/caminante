@@ -1,4 +1,4 @@
--- Camina 语法教程（A1–C1 完整讲解）
+-- Caminante 语法教程（A1–C1 完整讲解）
 -- 可重复运行：已存在则更新讲解内容
 
 insert into public.grammar_lessons (title, level, order_index, explanation_cn) values

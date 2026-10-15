@@ -1,4 +1,4 @@
--- Camina 3000 词库 · C1（高级，约 550 词）
+-- Caminante 3000 词库 · C1（高级，约 550 词）
 -- 可重复运行：冲突自动跳过。
 
 insert into public.words (spanish, pos, definition_cn, level, source, gender) values

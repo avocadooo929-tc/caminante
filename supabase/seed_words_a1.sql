@@ -1,4 +1,4 @@
--- Camina 3000 词库 · A1（入门级，约 600 词）
+-- Caminante 3000 词库 · A1（入门级，约 600 词）
 -- 可重复运行：冲突自动跳过。覆盖了原 seed_words.sql 的常用词。
 
 insert into public.words (spanish, pos, definition_cn, level, source, gender) values

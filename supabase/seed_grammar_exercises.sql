@@ -1,4 +1,4 @@
--- Camina 语法练习（A1–A2 填空/翻译题，含答案）
+-- Caminante 语法练习（A1–A2 填空/翻译题，含答案）
 
 -- 兼容旧库：补上 answer 列（新库本列已存在，会自动跳过）
 alter table public.grammar_exercises add column if not exists answer text;

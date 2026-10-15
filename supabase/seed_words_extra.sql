@@ -1,4 +1,4 @@
--- Camina 词库补充（补足到约 3000 词，约 1200 词）
+-- Caminante 词库补充（补足到约 3000 词，约 1200 词）
 -- 可重复运行：冲突自动跳过。可与 seed_words_a1~c1.sql 一起使用。
 
 insert into public.words (spanish, pos, definition_cn, level, source, gender) values
