@@ -77,6 +77,11 @@ export function buildGradeSystemPrompt(): string {
     '输出必须是合法 JSON，格式如下：',
     '{"correct":true,"feedback":"...","model_answer":"..."}',
     'correct 为布尔值；feedback 用中文指出错误、解释原因并给出鼓励；model_answer 给出一个正确的参考答案。',
+    '判分从宽：学生可能因键盘输入不便而出现以下情况，这些一律【不算错误】，只要词义、用词和语法正确，correct 就应为 true：',
+    '1. 缺少重音符号（如 adios 而非 adiós、cafe 而非 café）；',
+    '2. 用 n 代替 ñ（如 manana 而非 mañana、espanol 而非 español）；',
+    '3. 首字母未大写；',
+    '4. 句首缺少倒问号 ¿ 或倒感叹号 ¡（句末的 ? 和 ! 也非必须）。',
   ].join('\n')
 }
 
