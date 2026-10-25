@@ -50,6 +50,7 @@ export default function PalabrasPage() {
   const [grading, setGrading] = useState(false)
   const [gradeResult, setGradeResult] = useState<GradeResult | null>(null)
   const [exerciseError, setExerciseError] = useState<string | null>(null)
+  const [advancing, setAdvancing] = useState(false)
 
   const load = useCallback(async () => {
     const supabase = createClient()
@@ -247,24 +248,32 @@ export default function PalabrasPage() {
   }
 
   async function submitReview(correct: boolean) {
-    if (!current) return
+    if (!current || advancing) return
+    setAdvancing(true)
+
     const proficiency = nextProficiency(current.proficiency, correct)
-    const supabase = createClient()
-    await supabase
-      .from('user_words')
-      .update({
-        proficiency,
-        due_at: nextDueAt(proficiency).toISOString(),
-        last_reviewed_at: new Date().toISOString(),
-      })
-      .eq('id', current.id)
 
-    if (correct) await logStudy({ reviewed: 1 })
-
-    setProgressKey((k) => k + 1)
+    // 乐观更新当前词熟练度 → 先触发六边形点亮/清零动效
+    setDue((prev) => prev.map((it, i) => (i === idx ? { ...it, proficiency } : it)))
     setFlipped(false)
     setAnswer('')
     setGradeResult(null)
+    setProgressKey((k) => k + 1)
+
+    // 写库 + 动效时长并行，等动效播完再切换
+    const supabase = createClient()
+    await Promise.all([
+      supabase
+        .from('user_words')
+        .update({
+          proficiency,
+          due_at: nextDueAt(proficiency).toISOString(),
+          last_reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', current.id),
+      correct ? logStudy({ reviewed: 1 }) : Promise.resolve(),
+      new Promise((r) => setTimeout(r, 650)),
+    ])
 
     if (correct) {
       // 认识：前进到下一个
@@ -276,13 +285,16 @@ export default function PalabrasPage() {
     } else {
       // 不认识：重新加入学习队列最后，熟练度已清 0
       const wasLast = idx === due.length - 1
-      const next = [...due]
-      const [item] = next.splice(idx, 1)
-      next.push(item)
-      setDue(next)
+      setDue((prev) => {
+        const next = [...prev]
+        const [item] = next.splice(idx, 1)
+        next.push(item)
+        return next
+      })
       if (wasLast) setIdx(0)
     }
 
+    setAdvancing(false)
     await maybeCheckIn()
   }
 
@@ -371,10 +383,16 @@ export default function PalabrasPage() {
 
           {/* 认识 / 不认识（中间） */}
           <div className="grid grid-cols-2 gap-3">
-            <Button variant="outline" onClick={() => submitReview(false)}>
+            <Button
+              variant="outline"
+              onClick={() => submitReview(false)}
+              disabled={advancing}
+            >
               不认识
             </Button>
-            <Button onClick={() => submitReview(true)}>认识</Button>
+            <Button onClick={() => submitReview(true)} disabled={advancing}>
+              认识
+            </Button>
           </div>
 
           {/* 练习栏目（下） */}
@@ -458,6 +476,7 @@ export default function PalabrasPage() {
                 <Button
                   className="mt-4 w-full"
                   onClick={() => submitReview(gradeResult.correct)}
+                  disabled={advancing}
                 >
                   下一个
                 </Button>
