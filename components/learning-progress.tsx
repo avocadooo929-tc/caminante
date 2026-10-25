@@ -9,20 +9,17 @@ import { Card } from './ui/card'
 
 interface Row {
   proficiency: number
-  due_at: string
   word_id: string
 }
 
 const EMPTY_LEVEL: Record<Level, number> = { A1: 0, A2: 0, B1: 0, B2: 0, C1: 0 }
 
+const PROF_LABELS = ['未学', '1', '2', '3', '4', '5', '掌握']
+
 export function LearningProgress() {
-  const [stats, setStats] = useState({
-    total: 0,
-    known: 0,
-    learning: 0,
-    fresh: 0,
-    due: 0,
-  })
+  const [total, setTotal] = useState(0)
+  const [known, setKnown] = useState(0) // 熟练度 6 = 完全掌握
+  const [profDist, setProfDist] = useState<number[]>([0, 0, 0, 0, 0, 0, 0])
   const [perLevel, setPerLevel] = useState<Record<Level, number>>(EMPTY_LEVEL)
 
   useEffect(() => {
@@ -40,7 +37,7 @@ export function LearningProgress() {
       for (let from = 0; ; from += 1000) {
         const { data } = await supabase
           .from('user_words')
-          .select('proficiency, due_at, word_id')
+          .select('proficiency, word_id')
           .eq('user_id', user.id)
           .range(from, from + 999)
         const page = (data ?? []) as unknown as Row[]
@@ -48,42 +45,40 @@ export function LearningProgress() {
         if (page.length < 1000) break
       }
 
-      const now = new Date().toISOString()
-      let known = 0
-      let learning = 0
-      let fresh = 0
-      let due = 0
+      const dist = [0, 0, 0, 0, 0, 0, 0]
       const lvl: Record<Level, number> = { ...EMPTY_LEVEL }
-
+      let knownCount = 0
       for (const r of rows) {
-        if (r.proficiency >= 6) known++
-        else if (r.proficiency >= 1) learning++
-        else fresh++
-        if (r.proficiency < 6 && r.due_at <= now) due++
+        const p = Math.max(0, Math.min(6, r.proficiency))
+        dist[p]++
+        if (p >= 6) knownCount++
         const l = wordMap.get(r.word_id)?.level
         if (l && l in lvl) lvl[l]++
       }
 
-      setStats({ total: rows.length, known, learning, fresh, due })
+      setTotal(rows.length)
+      setKnown(knownCount)
+      setProfDist(dist)
       setPerLevel(lvl)
     }
     load()
   }, [])
 
-  const pct = stats.total > 0 ? Math.round((stats.known / stats.total) * 100) : 0
+  const pct = total > 0 ? Math.round((known / total) * 100) : 0
+  const maxProf = Math.max(1, ...profDist)
   const maxLevel = Math.max(1, ...LEVELS.map((l) => perLevel[l] ?? 0))
 
   return (
     <Card className="p-6">
-      <h2 className="font-black">学习进度</h2>
+      <h2 className="font-black">学习成果</h2>
 
       <div className="mt-4 flex items-end justify-between">
         <div>
           <div className="text-xs font-bold text-bauhaus-muted">已掌握</div>
-          <div className="text-4xl font-black text-bauhaus-blue">{stats.known}</div>
+          <div className="text-4xl font-black text-bauhaus-blue">{known}</div>
         </div>
         <div className="text-sm font-bold text-bauhaus-muted">
-          共 {stats.total} 词
+          共 {total} 词
         </div>
       </div>
 
@@ -94,20 +89,26 @@ export function LearningProgress() {
         {pct}% 掌握
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-        {[
-          { label: '学习中', value: stats.learning, color: 'text-bauhaus-yellow' },
-          { label: '新词', value: stats.fresh, color: 'text-bauhaus-muted' },
-          { label: '待复习', value: stats.due, color: 'text-bauhaus-red' },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="rounded-sm border-2 border-bauhaus-line p-2"
-          >
-            <div className={`text-xl font-black ${s.color}`}>{s.value}</div>
-            <div className="text-xs font-bold text-bauhaus-muted">{s.label}</div>
-          </div>
-        ))}
+      <div className="mt-5">
+        <div className="mb-2 text-xs font-bold text-bauhaus-muted">
+          熟练度分布
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {profDist.map((count, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="w-8 text-xs font-black">{PROF_LABELS[i]}</span>
+              <div className="h-3 flex-1 overflow-hidden rounded-sm border-2 border-bauhaus-line bg-white">
+                <div
+                  className="h-full bg-bauhaus-blue"
+                  style={{ width: `${(count / maxProf) * 100}%` }}
+                />
+              </div>
+              <span className="w-8 text-right text-xs font-bold text-bauhaus-muted">
+                {count}
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
 
       <div className="mt-5">

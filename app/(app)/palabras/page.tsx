@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/card'
 import { LevelBadge, PosTag, Tag } from '@/components/ui/badge'
 import { SpeakButton } from '@/components/speak-button'
 import { DailyProgress } from '@/components/daily-progress'
+import { ProficiencyRing } from '@/components/proficiency-ring'
 import { VerbConjugation } from '@/components/verb-conjugation'
 
 interface DueItem {
@@ -305,12 +306,19 @@ export default function PalabrasPage() {
             className="min-h-44 w-full cursor-pointer select-none text-left"
           >
             <Card className="flex min-h-44 flex-col justify-between p-6">
-              <div className="flex items-center gap-2">
-                <LevelBadge level={current.word.level} />
-                <PosTag pos={current.word.pos} />
-                {current.word.gender && (
-                  <Tag>{current.word.gender === 'm' ? '阳性' : '阴性'}</Tag>
-                )}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <LevelBadge level={current.word.level} />
+                  <PosTag pos={current.word.pos} />
+                  {current.word.gender && (
+                    <Tag>{current.word.gender === 'm' ? '阳性' : '阴性'}</Tag>
+                  )}
+                </div>
+                <ProficiencyRing
+                  proficiency={current.proficiency}
+                  key={current.id}
+                  className="h-12 w-12 shrink-0"
+                />
               </div>
               <div className="py-5 text-center">
                 <div className="flex items-center justify-center gap-3">
