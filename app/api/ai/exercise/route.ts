@@ -24,6 +24,7 @@ export async function POST(request: Request) {
     definitionCn?: unknown
     level?: unknown
     exerciseType?: unknown
+    grammarPoints?: unknown
   }
   try {
     body = await request.json()
@@ -38,6 +39,11 @@ export async function POST(request: Request) {
   const exerciseType = EXERCISE_TYPES.includes(body.exerciseType as ExerciseType)
     ? (body.exerciseType as ExerciseType)
     : null
+  const grammarPoints = Array.isArray(body.grammarPoints)
+    ? (body.grammarPoints as unknown[]).filter(
+        (x): x is string => typeof x === 'string'
+      )
+    : []
 
   if (!word || !definitionCn || !level || !exerciseType) {
     return NextResponse.json({ error: '参数不完整' }, { status: 400 })
@@ -49,6 +55,7 @@ export async function POST(request: Request) {
       definitionCn,
       level,
       exerciseType,
+      grammarPoints,
     })
     return NextResponse.json(result)
   } catch (e) {

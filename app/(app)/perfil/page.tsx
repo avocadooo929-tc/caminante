@@ -7,6 +7,7 @@ import type { ExerciseType, Level } from '@/lib/types'
 import { levelFromValue } from '@/lib/levels'
 import { LevelPicker } from '@/components/level-picker'
 import { LearningProgress } from '@/components/learning-progress'
+import { getGrammarProgress } from '@/lib/grammar-progress'
 import { CheckinCalendar } from '@/components/checkin-calendar'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -17,6 +18,8 @@ export default function PerfilPage() {
   const [dailyGoal, setDailyGoal] = useState(20)
   const [exerciseType, setExerciseType] = useState<ExerciseType>('translate_zh_es')
   const [saved, setSaved] = useState(false)
+  const [grammarDone, setGrammarDone] = useState(0)
+  const [grammarTotal, setGrammarTotal] = useState(0)
   const router = useRouter()
 
   useEffect(() => {
@@ -37,6 +40,13 @@ export default function PerfilPage() {
       if (data?.exercise_type) setExerciseType(data.exercise_type as ExerciseType)
     }
     load()
+  }, [])
+
+  useEffect(() => {
+    getGrammarProgress().then((prog) => {
+      setGrammarDone(prog.filter((p) => p.done).length)
+      setGrammarTotal(prog.length)
+    })
   }, [])
 
   async function onLevelChange(l: Level) {
@@ -86,6 +96,36 @@ export default function PerfilPage() {
       </Card>
 
       <LearningProgress />
+
+      <Card className="p-6">
+        <h2 className="font-black">语法学习成果</h2>
+        <div className="mt-3 flex items-end justify-between">
+          <div>
+            <div className="text-xs font-bold text-bauhaus-muted">已掌握语法点</div>
+            <div className="text-4xl font-black text-bauhaus-blue">{grammarDone}</div>
+          </div>
+          <div className="text-sm font-bold text-bauhaus-muted">
+            共 {grammarTotal} 章
+          </div>
+        </div>
+        <div className="mt-3 h-4 w-full overflow-hidden rounded-sm border-2 border-bauhaus-black bg-white">
+          <div
+            className="h-full bg-bauhaus-blue"
+            style={{
+              width: `${
+                grammarTotal > 0
+                  ? Math.round((grammarDone / grammarTotal) * 100)
+                  : 0
+              }%`,
+            }}
+          />
+        </div>
+        <div className="mt-1 text-right text-xs font-bold text-bauhaus-muted">
+          {grammarTotal > 0 ? Math.round((grammarDone / grammarTotal) * 100) : 0}%
+          掌握
+        </div>
+      </Card>
+
       <CheckinCalendar />
 
       <Card className="p-6">

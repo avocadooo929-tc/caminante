@@ -120,14 +120,21 @@ export function buildExerciseUserPrompt(
   exerciseType: ExerciseType,
   word: string,
   definitionCn: string,
-  level: Level
+  level: Level,
+  grammarPoints: string[] = []
 ): string {
+  const grammar = grammarPoints.length
+    ? `学习者已学过的语法点：${grammarPoints.slice(0, 10).join('、')}。请让这道题融合考察其中一个语法点（如时态变位、代词、性数一致等），但不要超出这些已学语法点。`
+    : ''
   return [
     `题型：${EXERCISE_TYPE_TEXT[exerciseType]}`,
     `目标词：${word}（中文释义：${definitionCn}）`,
     `目标难度：${level}。${LEVEL_GUIDE[level]}`,
+    grammar,
     '请生成一道练习。',
-  ].join('\n')
+  ]
+    .filter(Boolean)
+    .join('\n')
 }
 
 export function buildWordDetailSystemPrompt(): string {

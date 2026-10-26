@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { GrammarLesson } from '@/lib/types'
+import { getGrammarProgress, type LessonProgress } from '@/lib/grammar-progress'
 import { Card } from '@/components/ui/card'
 import { LevelBadge } from '@/components/ui/badge'
 
@@ -15,24 +16,27 @@ interface PartGroup {
 
 export default function GramaticaPage() {
   const [lessons, setLessons] = useState<GrammarLesson[]>([])
+  const [progress, setProgress] = useState<Map<string, LessonProgress>>(new Map())
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    createClient()
-      .from('grammar_lessons')
-      .select('*')
-      .order('order_index', { ascending: true })
-      .then(({ data }) => {
-        setLessons((data as GrammarLesson[]) ?? [])
-        setLoading(false)
-      })
+    async function load() {
+      const supabase = createClient()
+      const [lessonRes, prog] = await Promise.all([
+        supabase.from('grammar_lessons').select('*').order('order_index', { ascending: true }),
+        getGrammarProgress(),
+      ])
+      setLessons((lessonRes.data as GrammarLesson[]) ?? [])
+      setProgress(new Map(prog.map((p) => [p.lessonId, p])))
+      setLoading(false)
+    }
+    load()
   }, [])
 
   if (loading) {
     return <p className="py-10 text-center text-bauhaus-muted">加载中…</p>
   }
 
-  // 按 part_no 分组（保持 order_index 顺序）
   const parts: PartGroup[] = []
   for (const l of lessons) {
     const pn = l.part_no ?? 0
@@ -52,28 +56,39 @@ export default function GramaticaPage() {
             </div>
           </div>
           <div className="flex flex-col gap-2">
-            {p.items.map((l) => (
-              <Link key={l.id} href={`/gramatica/${l.id}`}>
-                <Card className="flex items-center justify-between gap-3 p-4 shadow-none hover:bg-bauhaus-paper">
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold">
-                      {l.chapter_no != null && (
-                        <span className="mr-2 text-bauhaus-muted">
-                          {l.chapter_no}.
+            {p.items.map((l) => {
+              const prog = progress.get(l.id)
+              const done = prog?.done ?? false
+              return (
+                <Link key={l.id} href={`/gramatica/${l.id}`}>
+                  <Card className="flex items-center justify-between gap-3 p-4 shadow-none hover:bg-bauhaus-paper">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold">
+                          {l.chapter_no != null && (
+                            <span className="mr-2 text-bauhaus-muted">
+                              {l.chapter_no}.
+                            </span>
+                          )}
+                          {l.title}
                         </span>
-                      )}
-                      {l.title}
-                    </div>
-                    {l.subtopics && (
-                      <div className="mt-0.5 truncate text-xs text-bauhaus-muted">
-                        {l.subtopics.split('\n').filter(Boolean).join(' · ')}
+                        {done && (
+                          <span className="shrink-0 rounded-sm bg-bauhaus-blue px-1.5 py-0.5 text-[10px] font-black text-white">
+                            ✓ 已掌握
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <LevelBadge level={l.level} />
-                </Card>
-              </Link>
-            ))}
+                      {l.subtopics && (
+                        <div className="mt-0.5 truncate text-xs text-bauhaus-muted">
+                          {l.subtopics.split('\n').filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                    <LevelBadge level={l.level} />
+                  </Card>
+                </Link>
+              )
+            })}
           </div>
         </div>
       ))}

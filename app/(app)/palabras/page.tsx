@@ -8,6 +8,7 @@ import { levelFromValue } from '@/lib/levels'
 import { nextDueAt, nextProficiency } from '@/lib/srs'
 import { loadWordMap } from '@/lib/manual-words'
 import { checkInToday, logStudy } from '@/lib/study'
+import { getLearnedGrammarTitles } from '@/lib/grammar-progress'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { LevelBadge, PosTag, Tag } from '@/components/ui/badge'
@@ -41,9 +42,10 @@ export default function PalabrasPage() {
   // 闪卡例句（kind=flashcard）
   const [sentences, setSentences] = useState<ExampleSentence[]>([])
   const [sentencesLoading, setSentencesLoading] = useState(false)
-  // 练习栏目例句（kind=exercise，与闪卡不同）
-  const [exerciseSentence, setExerciseSentence] = useState<ExampleSentence | null>(null)
-  const [exerciseLoading, setExerciseLoading] = useState(false)
+  // 练习题目（每次重新生成，不缓存；融合已学语法点）
+  const [exercisePrompt, setExercisePrompt] = useState<string | null>(null)
+  const [exerciseAnswer, setExerciseAnswer] = useState<string | null>(null)
+  const [genLoading, setGenLoading] = useState(false)
 
   // 练习作答状态
   const [answer, setAnswer] = useState('')
@@ -138,64 +140,44 @@ export default function PalabrasPage() {
     }
   }
 
-  async function loadExerciseSentenceFor(item: DueItem) {
-    const supabase = createClient()
-    setExerciseLoading(true)
-    setExerciseSentence(null)
+  async function generateExerciseFor(item: DueItem) {
+    setGenLoading(true)
+    setExercisePrompt(null)
+    setExerciseAnswer(null)
+    setAnswer('')
+    setGradeResult(null)
+    setExerciseError(null)
     try {
-      const { data: cached } = await supabase
-        .from('sentences')
-        .select('spanish, chinese')
-        .eq('word_id', item.word_id)
-        .eq('level', userLevel)
-        .eq('kind', 'exercise')
-        .order('created_at', { ascending: true })
-        .limit(1)
-      let s = ((cached ?? [])[0] as ExampleSentence | undefined) ?? null
-      if (!s) {
-        const res = await fetch('/api/ai/sentences', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            wordId: item.word_id,
-            word: item.word.spanish,
-            pos: item.word.pos,
-            level: userLevel,
-            kind: 'exercise',
-          }),
-        })
-        const data = await res.json()
-        if (res.ok && Array.isArray(data.sentences) && data.sentences.length > 0) {
-          s = data.sentences[0] as ExampleSentence
-        }
-      }
-      setExerciseSentence(s)
-    } catch {
-      setExerciseSentence(null)
+      const grammarPoints = await getLearnedGrammarTitles()
+      const res = await fetch('/api/ai/exercise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          word: item.word.spanish,
+          definitionCn: item.word.definition_cn,
+          level: userLevel,
+          exerciseType,
+          grammarPoints,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || '出题失败')
+      setExercisePrompt(typeof data.prompt === 'string' ? data.prompt : null)
+      setExerciseAnswer(typeof data.answer === 'string' ? data.answer : null)
+    } catch (e) {
+      setExerciseError(e instanceof Error ? e.message : '出题失败')
     } finally {
-      setExerciseLoading(false)
+      setGenLoading(false)
     }
   }
 
   useEffect(() => {
     if (current) {
       loadSentencesFor(current)
-      loadExerciseSentenceFor(current)
+      generateExerciseFor(current)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current?.id])
-
-  const exercisePrompt = exerciseSentence
-    ? exerciseType === 'translate_zh_es'
-      ? `把下面的中文句子翻译成西班牙语：${exerciseSentence.chinese}`
-      : `把下面的西班牙语句子翻译成中文：${exerciseSentence.spanish}`
-    : null
-
-  const expectedHint = exerciseSentence
-    ? exerciseType === 'translate_zh_es'
-      ? exerciseSentence.spanish
-      : exerciseSentence.chinese
-    : null
 
   async function submitExercise() {
     if (!current || !exercisePrompt || answer.trim() === '') return
@@ -208,7 +190,7 @@ export default function PalabrasPage() {
         body: JSON.stringify({
           prompt: exercisePrompt,
           userAnswer: answer,
-          expectedHint: expectedHint ?? undefined,
+          expectedHint: exerciseAnswer ?? undefined,
         }),
       })
       const data = await res.json()
@@ -407,22 +389,18 @@ export default function PalabrasPage() {
               做对记「认识」，做错记「不认识」
             </p>
 
-            {exerciseSentence ? (
-              exerciseType === 'translate_zh_es' ? (
-                <p className="text-lg font-bold leading-relaxed">
-                  {exerciseSentence.chinese}
+            {exercisePrompt ? (
+              <div className="flex items-start gap-2">
+                <p className="whitespace-pre-line text-lg font-bold leading-relaxed">
+                  {exercisePrompt}
                 </p>
-              ) : (
-                <div className="flex items-start gap-2">
-                  <p className="text-lg font-bold leading-relaxed">
-                    {exerciseSentence.spanish}
-                  </p>
-                  <SpeakButton text={exerciseSentence.spanish} size={14} />
-                </div>
-              )
+                {exerciseType === 'translate_es_zh' && (
+                  <SpeakButton text={exercisePrompt} size={14} />
+                )}
+              </div>
             ) : (
               <p className="py-2 text-center text-sm font-bold text-bauhaus-muted">
-                {exerciseLoading ? '正在准备例句…' : '暂无例句'}
+                {genLoading ? '正在出题…' : '暂无题目'}
               </p>
             )}
 
@@ -441,7 +419,7 @@ export default function PalabrasPage() {
               <Button
                 className="mt-3 w-full"
                 onClick={submitExercise}
-                disabled={grading || answer.trim() === '' || !exerciseSentence}
+                disabled={grading || answer.trim() === '' || !exercisePrompt}
               >
                 {grading ? '批改中…' : '提交批改'}
               </Button>

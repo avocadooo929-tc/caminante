@@ -97,6 +97,7 @@ export async function generateExercise(opts: {
   word: string
   definitionCn: string
   level: Level
+  grammarPoints?: string[]
 }): Promise<GeneratedExercise> {
   return chatJSON<GeneratedExercise>([
     { role: 'system', content: buildExerciseSystemPrompt() },
@@ -106,7 +107,8 @@ export async function generateExercise(opts: {
         opts.exerciseType,
         opts.word,
         opts.definitionCn,
-        opts.level
+        opts.level,
+        opts.grammarPoints ?? []
       ),
     },
   ])

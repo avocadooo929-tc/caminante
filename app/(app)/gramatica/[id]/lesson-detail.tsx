@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
 import type { GrammarLesson } from '@/lib/types'
+import { gradeGrammar } from '@/lib/grammar-grade'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { LevelBadge } from '@/components/ui/badge'
@@ -18,35 +19,72 @@ interface GrammarExercise {
 export function LessonDetail({ id }: { id: string }) {
   const [lesson, setLesson] = useState<GrammarLesson | null>(null)
   const [exercises, setExercises] = useState<GrammarExercise[]>([])
-  const [revealed, setRevealed] = useState<Set<string>>(new Set())
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [results, setResults] = useState<Record<string, boolean>>({})
+  const [doneIds, setDoneIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    const supabase = createClient()
-    Promise.all([
-      supabase.from('grammar_lessons').select('*').eq('id', id).single(),
-      supabase
-        .from('grammar_exercises')
-        .select('id, prompt, answer, order_index')
-        .eq('lesson_id', id)
-        .order('order_index', { ascending: true }),
-    ]).then(([l, e]) => {
+    async function load() {
+      const supabase = createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      const [l, e, att] = await Promise.all([
+        supabase.from('grammar_lessons').select('*').eq('id', id).single(),
+        supabase
+          .from('grammar_exercises')
+          .select('id, prompt, answer, order_index')
+          .eq('lesson_id', id)
+          .order('order_index', { ascending: true }),
+        user
+          ? supabase
+              .from('grammar_attempts')
+              .select('exercise_id')
+              .eq('user_id', user.id)
+              .eq('correct', true)
+          : Promise.resolve({ data: null }),
+      ])
+
       setLesson((l.data as GrammarLesson) ?? null)
       setExercises((e.data as GrammarExercise[]) ?? [])
-    })
+      setDoneIds(
+        new Set(
+          ((att.data ?? []) as { exercise_id: string }[]).map((r) => r.exercise_id)
+        )
+      )
+    }
+    load()
   }, [id])
 
-  function toggle(exId: string) {
-    setRevealed((s) => {
-      const next = new Set(s)
-      if (next.has(exId)) next.delete(exId)
-      else next.add(exId)
-      return next
-    })
+  async function submit(ex: GrammarExercise) {
+    const answer = (answers[ex.id] ?? '').trim()
+    if (!answer || !ex.answer) return
+
+    const correct = gradeGrammar(answer, ex.answer)
+    setResults((prev) => ({ ...prev, [ex.id]: correct }))
+    if (correct) setDoneIds((prev) => new Set(prev).add(ex.id))
+
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user) {
+      await supabase.from('grammar_attempts').insert({
+        user_id: user.id,
+        exercise_id: ex.id,
+        user_answer: answer,
+        correct,
+      })
+    }
   }
 
   if (!lesson) {
     return <p className="py-10 text-center text-bauhaus-muted">加载中…</p>
   }
+
+  const doneCount = exercises.filter((e) => doneIds.has(e.id)).length
+  const allDone = exercises.length > 0 && doneCount === exercises.length
 
   return (
     <div className="flex flex-col gap-5">
@@ -99,34 +137,76 @@ export function LessonDetail({ id }: { id: string }) {
       </Card>
 
       <Card className="p-6">
-        <h2 className="mb-3 font-black">练习</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="font-black">练习</h2>
+          <span className="text-xs font-bold text-bauhaus-muted">
+            已完成 {doneCount} / {exercises.length}
+          </span>
+        </div>
+
+        {allDone && (
+          <div className="mt-3 rounded-sm bg-bauhaus-blue px-4 py-3 text-center font-black text-white">
+            ✓ 本语法点已全部掌握
+          </div>
+        )}
+
         {exercises.length === 0 ? (
-          <p className="text-sm text-bauhaus-muted">
+          <p className="mt-3 text-sm text-bauhaus-muted">
             本课配套练习整理中，敬请期待。
           </p>
         ) : (
-          <div className="flex flex-col gap-3">
-            {exercises.map((ex, i) => (
-              <div key={ex.id} className="rounded-sm border-2 border-bauhaus-line bg-bauhaus-paper p-3">
-                <div className="text-sm font-bold">
-                  {i + 1}. {ex.prompt}
-                </div>
-                <div className="mt-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => toggle(ex.id)}
-                  >
-                    {revealed.has(ex.id) ? '隐藏答案' : '显示答案'}
-                  </Button>
-                  {revealed.has(ex.id) && (
-                    <div className="mt-2 text-base font-black text-bauhaus-blue">
-                      {ex.answer}
+          <div className="mt-3 flex flex-col gap-3">
+            {exercises.map((ex, i) => {
+              const done = doneIds.has(ex.id)
+              const result = results[ex.id]
+              return (
+                <div
+                  key={ex.id}
+                  className="rounded-sm border-2 border-bauhaus-line bg-bauhaus-paper p-3"
+                >
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm font-bold text-bauhaus-muted">
+                      {i + 1}.
+                    </span>
+                    <span className="text-sm font-bold">{ex.prompt}</span>
+                    {done && (
+                      <span className="ml-auto shrink-0 rounded-sm bg-bauhaus-blue px-1.5 py-0.5 text-[10px] font-black text-white">
+                        已掌握
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="mt-2 flex gap-2">
+                    <input
+                      value={answers[ex.id] ?? ''}
+                      onChange={(e) =>
+                        setAnswers((prev) => ({ ...prev, [ex.id]: e.target.value }))
+                      }
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') submit(ex)
+                      }}
+                      placeholder="输入你的答案"
+                      className="h-10 flex-1 rounded-sm border-2 border-bauhaus-black bg-white px-3 outline-none focus:border-bauhaus-blue"
+                    />
+                    <Button size="sm" onClick={() => submit(ex)}>
+                      提交
+                    </Button>
+                  </div>
+
+                  {result !== undefined && (
+                    <div className="mt-2 text-sm font-bold">
+                      {result ? (
+                        <span className="text-bauhaus-blue">✓ 正确</span>
+                      ) : (
+                        <span className="text-bauhaus-red">
+                          ✗ 错误 · 参考答案：{ex.answer}
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </Card>
