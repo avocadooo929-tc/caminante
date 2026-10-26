@@ -58,9 +58,34 @@ export function LessonDetail({ id }: { id: string }) {
       </Link>
 
       <Card className="p-6">
-        <LevelBadge level={lesson.level} />
-        <h1 className="mt-4 text-2xl font-black">{lesson.title}</h1>
+        {lesson.part_title && (
+          <div className="text-xs font-bold text-bauhaus-muted">
+            {lesson.part_title}
+            {lesson.chapter_no != null ? ` · 第 ${lesson.chapter_no} 章` : ''}
+          </div>
+        )}
+        <div className="mt-2">
+          <LevelBadge level={lesson.level} />
+        </div>
+        <h1 className="mt-3 text-2xl font-black">{lesson.title}</h1>
       </Card>
+
+      {lesson.subtopics && (
+        <Card className="p-6">
+          <h2 className="mb-3 font-black">本节内容</h2>
+          <ul className="flex flex-col gap-1.5">
+            {lesson.subtopics
+              .split('\n')
+              .filter(Boolean)
+              .map((s, i) => (
+                <li key={i} className="flex gap-2 text-sm font-bold">
+                  <span className="text-bauhaus-muted">{i + 1}.</span>
+                  <span>{s}</span>
+                </li>
+              ))}
+          </ul>
+        </Card>
+      )}
 
       <Card className="p-6">
         <h2 className="mb-3 font-black">讲解</h2>

@@ -55,4 +55,8 @@ export interface GrammarLesson {
   level: Level
   order_index: number
   explanation_cn: string
+  part_no: number | null
+  part_title: string | null
+  chapter_no: number | null
+  subtopics: string | null
 }
